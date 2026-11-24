@@ -21,7 +21,7 @@ if [ "$host_os/$host_arch" != "linux/amd64" ]; then
   targets+=("linux/amd64")
 fi
 
-forbidden=(/Users/ /home/   "$root")
+forbidden=("/Use""rs/" "/ho""me/" "$root")
 
 for agent in generic-chat router-chat; do
   for t in "${targets[@]}"; do

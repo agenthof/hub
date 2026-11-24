@@ -1,0 +1,120 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.1"
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # golangci-lint cannot yet read newer toolchains' export data, so lint runs
+    # on go1.27.1 and GOTOOLCHAIN=local stops go from switching toolchains.
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.1"
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # gitleaks scans full history
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.1"
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...  # latest is deliberate: vuln DB fetched at runtime
+      - name: gitleaks
+        run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 detect --source . --config .gitleaks.toml --redact --no-banner
+      - name: no machine-local paths or non-ASCII bytes in tracked files
+        run: |
+          # Bracketed first letters keep this step from matching itself.
+          if git grep -nE '/[U]sers/|/[h]ome/' -- . ':!.github/workflows/ci.yml'; then
+            echo "machine-local path found in tracked files" >&2
+            exit 1
+          fi
+          if git grep -nP '[^\x00-\x7F]' -- . ':!LICENSE'; then
+            echo "non-ASCII bytes found in tracked files" >&2
+            exit 1
+          fi
+
+  reproducible:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: [generic-chat, router-chat]
+        target: [linux/amd64, darwin/arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.1"
+      - name: rebuild and compare with the card's pinned hash
+        env:
+          AGENT: ${{ matrix.agent }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          goos=${TARGET%/*}
+          goarch=${TARGET#*/}
+          out="$RUNNER_TEMP/$AGENT-$goos-$goarch"
+          got=$(scripts/build.sh "$AGENT" "$goos" "$goarch" "$out")
+          want=$(jq -r --arg os "$goos" --arg arch "$goarch" \
+            '.capabilities.extensions[].params["host-program"].builds[]
+             | select(.os == $os and .arch == $arch) | .sha256' \
+            "agents/$AGENT/card.json")
+          echo "built:  $got"
+          echo "pinned: $want"
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "hash mismatch for $AGENT $TARGET" >&2
+            exit 1
+          fi
+          if grep -aqE '/[U]sers/|/[h]ome/' "$out"; then
+            echo "built binary contains a machine-local path" >&2
+            exit 1
+          fi
+
+  cards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: agenthof/agenthof
+          ref: 82c20c9e576c851e29a9f20399cd270fed829e85
+          path: engine
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: engine/go.mod
+      - name: disclose every committed card
+        env:
+          ENGINE_DIR: ${{ github.workspace }}/engine
+        run: scripts/enroll-check.sh
