@@ -35,7 +35,17 @@ the agent runs on and what it costs.
 Cards are signed by the hub curator. The published public key and key id go
 here so you can add them to your engine's trusted signers:
 
-<!-- curator-key -->
+Cards in this repo are signed by the hub curator. The curator public key (safe to publish):
+
+- public key: `k2troapQ5SHzGpMeckKzHBUNcI517qZmiX/bw9Bl05o=`
+- kid: `f07e492a38568409cbcb459b1feac8b70e08eec00149ac1981b4f9c053412404`
+
+To trust cards signed by this curator, add this to your gateway.yaml:
+
+```yaml
+trusted_signers:
+  - {kid: f07e492a38568409cbcb459b1feac8b70e08eec00149ac1981b4f9c053412404, key: k2troapQ5SHzGpMeckKzHBUNcI517qZmiX/bw9Bl05o=}
+```
 
 ## Contributing
 
