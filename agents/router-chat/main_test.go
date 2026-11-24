@@ -12,9 +12,9 @@ import (
 )
 
 const testInput = `{"menu":[` +
-	`{"role":"meeting-rag","workflow":"answer","description":"answer questions about past meetings"},` +
-	`{"role":"drive-search","workflow":"find","description":"find a file in the drive"}],` +
-	`"utterance":"where is the Q3 budget spreadsheet?"}`
+	`{"role":"billing","workflow":"answer","description":"answer billing questions"},` +
+	`{"role":"refund","workflow":"find","description":"process a refund request"}],` +
+	`"utterance":"I want my money back"}`
 
 // stubProxy answers every chat call with reply and records what it saw.
 func stubProxy(t *testing.T, reply string, gotModel *string, gotPrompt *string) *httptest.Server {
@@ -51,14 +51,14 @@ func TestRouterPicksMenuEntry(t *testing.T) {
 	if !got.Success {
 		t.Fatalf("expected success, got %+v", got)
 	}
-	want := `{"role":"drive-search","workflow":"find"}`
+	want := `{"role":"refund","workflow":"find"}`
 	if got.Artifact != want {
 		t.Errorf("artifact = %q, want %q", got.Artifact, want)
 	}
 	if gotModel != "router" {
 		t.Errorf("model = %q, want router", gotModel)
 	}
-	for _, s := range []string{"meeting-rag", "drive-search", "find a file in the drive", "Q3 budget spreadsheet"} {
+	for _, s := range []string{"billing", "refund", "process a refund request", "money back"} {
 		if !strings.Contains(gotPrompt, s) {
 			t.Errorf("prompt missing %q:\n%s", s, gotPrompt)
 		}
@@ -66,7 +66,7 @@ func TestRouterPicksMenuEntry(t *testing.T) {
 }
 
 func TestRouterNoMatchReturnsNull(t *testing.T) {
-	for _, reply := range []string{"0", "3", "-1", "none", "calendar-bot/schedule"} {
+	for _, reply := range []string{"0", "3", "-1", "none", "docs/search"} {
 		srv := stubProxy(t, reply, nil, nil)
 		got := classify(context.Background(), srv.Client(), srv.URL, "tok", agentkit.Request{Input: testInput})
 		if got.Artifact != "null" || !got.Success {
@@ -89,7 +89,7 @@ func TestRouterAcceptsDecoratedNumber(t *testing.T) {
 	for _, reply := range []string{" 1 ", "1.", "(1)", "\"1\"", "1\n"} {
 		srv := stubProxy(t, reply, nil, nil)
 		got := classify(context.Background(), srv.Client(), srv.URL, "tok", agentkit.Request{Input: testInput})
-		if got.Artifact != `{"role":"meeting-rag","workflow":"answer"}` {
+		if got.Artifact != `{"role":"billing","workflow":"answer"}` {
 			t.Errorf("reply %q: got %+v", reply, got)
 		}
 	}

@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.1"
+          go-version-file: go.mod
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go build ./...
@@ -47,7 +47,7 @@ jobs:
           fetch-depth: 0   # gitleaks scans full history
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.1"
+          go-version-file: go.mod
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...  # latest is deliberate: vuln DB fetched at runtime
       - name: gitleaks
@@ -55,13 +55,24 @@ jobs:
       - name: no machine-local paths or non-ASCII bytes in tracked files
         run: |
           # Bracketed first letters keep this step from matching itself.
-          if git grep -nE '/[U]sers/|/[h]ome/' -- . ':!.github/workflows/ci.yml'; then
+          # git grep exits 0 on a match, 1 on none, >1 on error; only 1 is clean.
+          rc=0
+          git grep -nE '/[U]sers/|/[h]ome/' || rc=$?
+          if [ "$rc" -eq 0 ]; then
             echo "machine-local path found in tracked files" >&2
             exit 1
+          elif [ "$rc" -ne 1 ]; then
+            echo "git grep failed (exit $rc)" >&2
+            exit "$rc"
           fi
-          if git grep -nP '[^\x00-\x7F]' -- . ':!LICENSE'; then
+          rc=0
+          git grep -nP '[^\x00-\x7F]' || rc=$?
+          if [ "$rc" -eq 0 ]; then
             echo "non-ASCII bytes found in tracked files" >&2
             exit 1
+          elif [ "$rc" -ne 1 ]; then
+            echo "git grep failed (exit $rc)" >&2
+            exit "$rc"
           fi
 
   reproducible:
@@ -76,7 +87,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.1"
+          go-version-file: go.mod
       - name: rebuild and compare with the card's pinned hash
         env:
           AGENT: ${{ matrix.agent }}
@@ -88,7 +99,7 @@ jobs:
           got=$(scripts/build.sh "$AGENT" "$goos" "$goarch" "$out")
           want=$(jq -r --arg os "$goos" --arg arch "$goarch" \
             '.capabilities.extensions[].params["host-program"].builds[]
-             | select(.os == $os and .arch == $arch) | .sha256' \
+             | select(.os == $os and .arch == $arch) | .sha256 // empty' \
             "agents/$AGENT/card.json")
           echo "built:  $got"
           echo "pinned: $want"

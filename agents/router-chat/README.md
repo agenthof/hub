@@ -34,7 +34,8 @@ above, fails the run with a reason.
 
 The agent asks for a model named `router`. You must define a model with that
 name in your gateway catalog, mapping the logical name to the real model you
-want to use. Without it, every run fails at the model call.
+want to use. `agenthof enroll` refuses the card until a model of that logical
+name is defined in your gateway catalog.
 
 ## Enroll
 

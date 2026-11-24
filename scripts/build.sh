@@ -23,6 +23,18 @@ case "$agent" in
   *) echo "unknown agent: $agent" >&2; exit 2 ;;
 esac
 
+# The card hashes are only reproducible on the pinned toolchain.
+want_go=go1.27.4
+have_go=$(go env GOVERSION)
+if [ "$have_go" != "$want_go" ]; then
+  echo "build.sh needs $want_go (found $have_go); the pinned hashes do not reproduce on other toolchains" >&2
+  exit 1
+fi
+
+# Neutralize environment that would change the produced bytes.
+export GOFLAGS=
+export GOAMD64='' GOARM64='' GOEXPERIMENT=''
+
 root=$(cd "$(dirname "$0")/.." && pwd)
 
 # go -C changes directory, so make the output path absolute first.

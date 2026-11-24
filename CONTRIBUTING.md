@@ -3,7 +3,8 @@
 Thanks for your interest. The hub is a collection of signed, enrollable agent
 definitions for the Agenthof engine. Each agent is a directory under `agents/`
 holding its definition and a card describing what it asks for. Issues,
-discussion, and new agents are all welcome.
+discussion, and agent proposals are welcome; the curator decides what is
+signed.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -23,8 +24,8 @@ unsigned commits will be asked to amend.
   shown to the operator at enroll time.
 - Declare a *logical* model name. Operators map it to a real model in their
   own gateway catalog.
-- Cards are signed by the curator when a release is cut; do not add
-  signatures to a pull request.
+- Cards are signed only by the curator; do not add signatures to a pull
+  request.
 - Never commit secrets or credentials.
 
 ## License

@@ -112,7 +112,8 @@ func clientAndBase(client *http.Client, proxyURL string) (*http.Client, string) 
 
 // ChatOnce makes one chat completion call through the per-run proxy and
 // returns the first choice's message content. Redirects are never followed:
-// the proxy is a trust boundary.
+// the proxy is a trust boundary. For a unix:// proxy the passed *http.Client is
+// ignored and a per-call unix-dialing client is used.
 func ChatOnce(ctx context.Context, client *http.Client, proxyURL, runToken, model string, messages []Msg) (string, error) {
 	c, base := clientAndBase(client, proxyURL)
 

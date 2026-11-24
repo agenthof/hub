@@ -2,3 +2,12 @@ title = "agenthof hub gitleaks config"
 
 [extend]
 useDefault = true
+
+[allowlist]
+description = "the published curator public key"
+regexes = [
+  # The hub curator's Ed25519 PUBLIC key, documented in README.md and echoed
+  # in scripts/enroll-check.sh. A public key, never a secret; matched by value
+  # (not path) because gitleaks scans full history.
+  '''k2troapQ5SHzGpMeckKzHBUNcI517qZmiX/bw9Bl05o=''',
+]

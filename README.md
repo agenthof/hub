@@ -5,6 +5,8 @@ A place to install **governed, signed agents you don't have to trust.**
 Each agent in the hub is described by a signed card. You do not have to trust
 the agent itself, because:
 
+- the card **pins the exact program bytes** (sha256); your engine refuses to
+  launch anything else;
 - it is **contained** by your own Agenthof engine, not by anything the agent
   says about itself;
 - the grants it requests (models, tools, and so on) are **disclosed** in its
@@ -18,11 +20,16 @@ configure. See the engine's documentation for the honest limits.
 
 ## Install
 
-Enroll an agent from a tagged release:
+Enroll an agent from a tagged release (`--name` and `--role` are required):
 
-    agenthof enroll https://raw.githubusercontent.com/agenthof/hub/<tag>/agents/<name>/card.json
+    agenthof enroll https://raw.githubusercontent.com/agenthof/hub/<tag>/agents/<name>/card.json --name <name> --role <role>
 
 Pin a tag rather than a branch so the card you review is the card you enroll.
+
+The card pins the exact program bytes (sha256) your engine will launch. To get
+bytes that match the pinned hash, build the agent on the pinned Go toolchain
+with `scripts/build.sh <agent> <os> <arch> <out>`, then point the spawn
+supervisor's `images` entry at that binary.
 
 ## Model names
 
@@ -31,9 +38,6 @@ map that name to a real model in your own gateway catalog, so you choose what
 the agent runs on and what it costs.
 
 ## Curator key
-
-Cards are signed by the hub curator. The published public key and key id go
-here so you can add them to your engine's trusted signers:
 
 Cards in this repo are signed by the hub curator. The curator public key (safe to publish):
 
