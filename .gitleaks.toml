@@ -1,0 +1,4 @@
+title = "agenthof hub gitleaks config"
+
+[extend]
+useDefault = true

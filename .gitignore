@@ -1,0 +1,11 @@
+# build artifacts
+*.exe
+*.test
+*.out
+*.o
+/bin/
+/dist/
+
+# OS
+.DS_Store
+Thumbs.db
