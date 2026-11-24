@@ -83,15 +83,38 @@ func Serve(socketPath string, h Handler) error {
 	return srv.Serve(ln)
 }
 
-// ChatOnce makes one chat completion call through the per-run proxy and
-// returns the first choice's message content. Redirects are never followed:
-// the proxy is a trust boundary.
-func ChatOnce(ctx context.Context, client *http.Client, proxyURL, runToken, model string, messages []Msg) (string, error) {
+const unixScheme = "unix://"
+
+// clientAndBase returns the client and URL base for a proxy URL. An http(s)
+// proxy uses a copy of the caller's client; a unix:// proxy gets a per-call
+// client that dials the socket, with a placeholder host. Neither follows
+// redirects.
+func clientAndBase(client *http.Client, proxyURL string) (*http.Client, string) {
+	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if path, ok := strings.CutPrefix(proxyURL, unixScheme); ok {
+		return &http.Client{
+			CheckRedirect: noRedirect,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+					return (&net.Dialer{}).DialContext(ctx, "unix", path)
+				},
+			},
+		}, "http://agenthof"
+	}
 	c := http.Client{}
 	if client != nil {
 		c = *client
 	}
-	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	c.CheckRedirect = noRedirect
+	return &c, strings.TrimRight(proxyURL, "/")
+}
+
+// ChatOnce makes one chat completion call through the per-run proxy and
+// returns the first choice's message content. Redirects are never followed:
+// the proxy is a trust boundary.
+func ChatOnce(ctx context.Context, client *http.Client, proxyURL, runToken, model string, messages []Msg) (string, error) {
+	c, base := clientAndBase(client, proxyURL)
 
 	body, err := json.Marshal(struct {
 		Model    string `json:"model"`
@@ -101,7 +124,7 @@ func ChatOnce(ctx context.Context, client *http.Client, proxyURL, runToken, mode
 		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		strings.TrimRight(proxyURL, "/")+"/v1/chat/completions", bytes.NewReader(body))
+		base+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}

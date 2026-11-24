@@ -165,3 +165,56 @@ func TestChatOnceDoesNotFollowRedirects(t *testing.T) {
 		t.Fatal("want error on redirect")
 	}
 }
+
+func serveUnix(t *testing.T, h http.Handler) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "ak")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "gw.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: h}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	return "unix://" + sock
+}
+
+func TestChatOnceOverUnixSocket(t *testing.T) {
+	u := serveUnix(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("got %s %s", r.Method, r.URL.Path)
+		}
+		if a := r.Header.Get("Authorization"); a != "Bearer tok" {
+			t.Errorf("Authorization = %q", a)
+		}
+		var b struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b.Model != "m" {
+			t.Errorf("model = %q", b.Model)
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"over-unix"}}]}`))
+	}))
+	got, err := ChatOnce(context.Background(), nil, u, "tok", "m", []Msg{{Role: "user", Content: "hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "over-unix" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestChatOnceOverUnixSocketNon2xxErrors(t *testing.T) {
+	u := serveUnix(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusBadGateway)
+	}))
+	if _, err := ChatOnce(context.Background(), nil, u, "tok", "m", nil); err == nil {
+		t.Fatal("want error on 502")
+	}
+}
