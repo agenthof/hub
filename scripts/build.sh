@@ -8,7 +8,8 @@
 #
 # Authoritative hashes: the NATIVE darwin/arm64 build on the maintainer's host
 # is the authoritative hash for the darwin entry; linux/amd64 is produced by
-# cross-compiling with the same flags. CI re-verifies both.
+# cross-compiling with the same flags. Both are meant to be re-verified
+# independently.
 set -euo pipefail
 
 if [ "$#" -ne 4 ]; then
@@ -23,6 +24,12 @@ case "$agent" in
 esac
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+
+# go -C changes directory, so make the output path absolute first.
+case "$out" in
+  /*) ;;
+  *) out="$PWD/$out" ;;
+esac
 
 CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
   go -C "$root" build -trimpath -buildvcs=false -ldflags=-buildid= \
