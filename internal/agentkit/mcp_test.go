@@ -19,6 +19,8 @@ import (
 type mcpStub struct {
 	t   *testing.T
 	sse bool
+	// noID expects memory_upsert without the optional id argument.
+	noID bool
 
 	mu          sync.Mutex
 	initialized bool
@@ -94,16 +96,39 @@ func text(s string) map[string]any {
 	return map[string]any{"content": []any{map[string]any{"type": "text", "text": s}}}
 }
 
+// wantArgs asserts the tool received exactly the expected argument names, so a
+// client that drops or renames an argument fails.
+func (s *mcpStub) wantArgs(name string, args map[string]any, keys ...string) {
+	if len(args) != len(keys) {
+		s.t.Errorf("%s: args = %v, want keys %v", name, args, keys)
+	}
+	for _, k := range keys {
+		if _, ok := args[k]; !ok {
+			s.t.Errorf("%s: missing arg %q in %v", name, k, args)
+		}
+	}
+}
+
 func (s *mcpStub) tool(name string, args map[string]any) map[string]any {
 	switch name {
 	case "memory_upsert":
+		if s.noID {
+			s.wantArgs(name, args, "collection", "text", "vector", "metadata")
+		} else {
+			s.wantArgs(name, args, "collection", "id", "text", "vector", "metadata")
+		}
 		return map[string]any{"content": []any{}, "structuredContent": map[string]any{"id": "doc1#0"}}
 	case "memory_search":
+		s.wantArgs(name, args, "collection", "vector", "k")
 		return map[string]any{"content": []any{}, "structuredContent": map[string]any{
-			"results": []any{map[string]any{"id": "doc1#0", "score": 0.9}, map[string]any{"id": "doc2#1", "score": 0.5}}}}
+			"results": []any{
+				map[string]any{"id": "doc1#0", "score": 0.9, "text": "chunk one", "metadata": map[string]any{"source": "d1", "date": "2026-09-14"}},
+				map[string]any{"id": "doc2#1", "score": 0.5, "text": "chunk two", "metadata": map[string]any{}}}}}
 	case "search":
+		s.wantArgs(name, args, "query")
 		return text("d1 Entitlements sync\nd2 Token handling sync\n\n")
 	case "readGoogleDoc":
+		s.wantArgs(name, args, "documentId")
 		if args["documentId"] == "missing" {
 			r := text("not found")
 			r["isError"] = true
@@ -130,18 +155,21 @@ func (s *mcpStub) reply(w http.ResponseWriter, id int64, result any) {
 func exercise(t *testing.T, tc *ToolClient, stub *mcpStub) {
 	t.Helper()
 	ctx := context.Background()
-	id, err := tc.MemoryUpsert(ctx, "meetings", "hello", []float32{1, 2}, map[string]any{"source": "d1"})
+	id, err := tc.MemoryUpsert(ctx, "meetings", "d1#0", "hello", []float32{1, 2}, map[string]any{"source": "d1"})
 	if err != nil || id != "doc1#0" {
 		t.Fatalf("upsert = %q, %v", id, err)
 	}
-	if stub.lastArgs["collection"] != "meetings" || stub.lastArgs["text"] != "hello" {
+	if stub.lastArgs["collection"] != "meetings" || stub.lastArgs["id"] != "d1#0" || stub.lastArgs["text"] != "hello" {
 		t.Errorf("upsert args = %v", stub.lastArgs)
 	}
 	hits, err := tc.MemorySearch(ctx, "meetings", []float32{1, 2}, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(hits, []MemoryHit{{"doc1#0", 0.9}, {"doc2#1", 0.5}}) {
+	if !reflect.DeepEqual(hits, []MemoryHit{
+		{ID: "doc1#0", Score: 0.9, Text: "chunk one", Metadata: map[string]any{"source": "d1", "date": "2026-09-14"}},
+		{ID: "doc2#1", Score: 0.5, Text: "chunk two", Metadata: map[string]any{}},
+	}) {
 		t.Fatalf("hits = %v", hits)
 	}
 	if stub.lastArgs["k"] != float64(2) {
@@ -206,7 +234,7 @@ func TestToolClientBadBearerErrors(t *testing.T) {
 	}
 }
 
-func TestToolClientRPCErrorAndMissingStructured(t *testing.T) {
+func TestToolClientRPCError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			ID     *int64 `json:"id"`
@@ -227,5 +255,42 @@ func TestToolClientRPCErrorAndMissingStructured(t *testing.T) {
 	tc := NewToolClient(srv.Client(), srv.URL, "tok")
 	if _, err := tc.MemorySearch(context.Background(), "c", []float32{1}, 1); err == nil || !strings.Contains(err.Error(), "bad args") {
 		t.Fatalf("want rpc error, got %v", err)
+	}
+}
+
+func TestToolClientMissingStructuredContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID     *int64 `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		w.Header().Set("Content-Type", "application/json")
+		switch req.Method {
+		case "initialize":
+			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%d,"result":{"protocolVersion":"2025-06-18"}}`, *req.ID)
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%d,"result":{"content":[{"type":"text","text":"ok"}]}}`, *req.ID)
+		}
+	}))
+	defer srv.Close()
+	tc := NewToolClient(srv.Client(), srv.URL, "tok")
+	if _, err := tc.MemorySearch(context.Background(), "c", []float32{1}, 1); err == nil || !strings.Contains(err.Error(), "structuredContent") {
+		t.Fatalf("want missing structuredContent error, got %v", err)
+	}
+}
+
+func TestMemoryUpsertOmitsEmptyID(t *testing.T) {
+	stub := &mcpStub{t: t, noID: true}
+	srv := httptest.NewServer(stub)
+	defer srv.Close()
+	tc := NewToolClient(srv.Client(), srv.URL, "tok")
+	if _, err := tc.MemoryUpsert(context.Background(), "c", "", "x", []float32{1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := stub.lastArgs["id"]; ok {
+		t.Fatalf("empty id was sent: %v", stub.lastArgs)
 	}
 }

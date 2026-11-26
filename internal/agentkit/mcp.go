@@ -27,10 +27,13 @@ const (
 	toolDriveRead    = "readGoogleDoc"
 )
 
-// MemoryHit is one memory_search result.
+// MemoryHit is one memory_search result, carrying the stored chunk text and
+// metadata.
 type MemoryHit struct {
-	ID    string  `json:"id"`
-	Score float64 `json:"score"`
+	ID       string         `json:"id"`
+	Score    float64        `json:"score"`
+	Text     string         `json:"text"`
+	Metadata map[string]any `json:"metadata"`
 }
 
 // DriveHit is one drive search result: a document id and its title.
@@ -62,16 +65,20 @@ func NewToolClient(client *http.Client, proxyURL, runToken string) *ToolClient {
 }
 
 // MemoryUpsert stores text with its vector and metadata and returns the id.
-func (t *ToolClient) MemoryUpsert(ctx context.Context, collection, text string, vector []float32, metadata map[string]any) (string, error) {
+// A non-empty id is a stable caller id: upserting the same id overwrites. An
+// empty id is omitted and the store assigns one.
+func (t *ToolClient) MemoryUpsert(ctx context.Context, collection, id, text string, vector []float32, metadata map[string]any) (string, error) {
 	if metadata == nil {
 		metadata = map[string]any{}
+	}
+	args := map[string]any{"collection": collection, "text": text, "vector": vector, "metadata": metadata}
+	if id != "" {
+		args["id"] = id
 	}
 	var out struct {
 		ID string `json:"id"`
 	}
-	err := t.callTool(ctx, toolMemoryUpsert, map[string]any{
-		"collection": collection, "text": text, "vector": vector, "metadata": metadata,
-	}, &out, nil)
+	err := t.callTool(ctx, toolMemoryUpsert, args, &out, nil)
 	return out.ID, err
 }
 
