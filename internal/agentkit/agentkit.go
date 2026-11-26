@@ -159,3 +159,50 @@ func ChatOnce(ctx context.Context, client *http.Client, proxyURL, runToken, mode
 	}
 	return out.Choices[0].Message.Content, nil
 }
+
+// EmbedOnce embeds input through the per-run proxy's embeddings door and
+// returns the vector. Redirects are never followed; a unix:// proxy is dialed
+// the same way as in ChatOnce.
+func EmbedOnce(ctx context.Context, client *http.Client, proxyURL, runToken, model, input string) ([]float32, error) {
+	c, base := clientAndBase(client, proxyURL)
+
+	body, err := json.Marshal(struct {
+		Model string `json:"model"`
+		Input string `json:"input"`
+	}{model, input})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		base+"/v1/embeddings", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+runToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("embeddings: status %d", resp.StatusCode)
+	}
+	var out struct {
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("embeddings: decode: %w", err)
+	}
+	if len(out.Data) == 0 || len(out.Data[0].Embedding) == 0 {
+		return nil, errors.New("embeddings: no embedding returned")
+	}
+	return out.Data[0].Embedding, nil
+}

@@ -11,7 +11,7 @@
 #   ENGINE_DIR    path to an agenthof engine checkout at the pinned commit;
 #                 the binary is built from it when AGENTHOF_BIN is unset
 #
-# Pinned engine commit: 82c20c9e576c851e29a9f20399cd270fed829e85
+# Pinned engine commit: c6a080120b810bef67668425082c0526bebf0831
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,7 +36,11 @@ cat >"$cfg/gateway.yaml" <<'YAML'
 models:
   chat: {endpoint: http://localhost:4000, model: chat, api_key_env: K}
   router: {endpoint: http://localhost:4000, model: router, api_key_env: K}
+  embed: {endpoint: http://localhost:4000, model: embed, api_key_env: K}
 defaults: {model: chat}
+tools:
+  drive: {kind: mcp, url: "unix:///tmp/none-drive.sock", runtime: refbridge, credential_source: static_env, token_env: DK, read_only_tools: [search, readGoogleDoc]}
+  memory: {kind: mcp, url: "unix:///tmp/none-mem.sock", runtime: refbridge, credential_source: static_env, token_env: MK, read_only_tools: [memory_search]}
 trusted_signers:
   - {kid: f07e492a38568409cbcb459b1feac8b70e08eec00149ac1981b4f9c053412404, key: k2troapQ5SHzGpMeckKzHBUNcI517qZmiX/bw9Bl05o=}
 YAML
