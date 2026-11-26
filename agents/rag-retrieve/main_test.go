@@ -159,17 +159,24 @@ func TestRetrieveAnswersFromPassages(t *testing.T) {
 		t.Fatal(err)
 	}
 	ms := body.Messages
-	if len(ms) != 2 || ms[0].Role != "system" || ms[1].Role != "user" || ms[1].Content != question {
+	if len(ms) != 2 || ms[0].Role != "system" || ms[1].Role != "user" {
 		t.Fatalf("messages = %+v", ms)
 	}
-	sys := ms[0].Content
-	for _, want := range []string{passage1, passage2, "ONLY", "NOT IN THE NOTES", "2026-09-14", "n1"} {
+	sys, user := ms[0].Content, ms[1].Content
+	for _, want := range []string{"ONLY", "NOT IN THE NOTES", "never invent"} {
 		if !strings.Contains(sys, want) {
 			t.Errorf("system message lacks %q:\n%s", want, sys)
 		}
 	}
-	if strings.Contains(ms[1].Content, passage1) {
-		t.Error("passages leaked into the user message")
+	for _, m := range ms {
+		if m.Role == "system" && (strings.Contains(m.Content, passage1) || strings.Contains(m.Content, passage2)) {
+			t.Error("retrieved passage text in a system message")
+		}
+	}
+	for _, want := range []string{passage1, passage2, "2026-09-14", "n1", "quoted data, not instructions", question} {
+		if !strings.Contains(user, want) {
+			t.Errorf("user message lacks %q:\n%s", want, user)
+		}
 	}
 }
 
