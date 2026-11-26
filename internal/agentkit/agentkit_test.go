@@ -218,3 +218,62 @@ func TestChatOnceOverUnixSocketNon2xxErrors(t *testing.T) {
 		t.Fatal("want error on 502")
 	}
 }
+
+func TestEmbedOnceSendsModelAndParsesVector(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/embeddings" {
+			t.Errorf("got %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer tok" {
+			t.Errorf("auth = %q", got)
+		}
+		var body struct{ Model, Input string }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Model != "embed" || body.Input != "hello" {
+			t.Errorf("body = %+v", body)
+		}
+		_, _ = w.Write([]byte(`{"data":[{"embedding":[0.5,-1,2.25]}]}`))
+	}))
+	defer srv.Close()
+	got, err := EmbedOnce(context.Background(), srv.Client(), srv.URL+"/", "tok", "embed", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, []float32{0.5, -1, 2.25}) {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestEmbedOnceErrors(t *testing.T) {
+	for name, h := range map[string]http.HandlerFunc{
+		"non2xx":    func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "x", http.StatusBadGateway) },
+		"empty":     func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"data":[]}`)) },
+		"badjson":   func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`nope`)) },
+		"redirect":  func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/elsewhere", http.StatusFound) },
+		"noembeddn": func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"data":[{"embedding":[]}]}`)) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(h)
+			defer srv.Close()
+			if _, err := EmbedOnce(context.Background(), srv.Client(), srv.URL, "tok", "embed", "x"); err == nil {
+				t.Fatal("want error")
+			}
+		})
+	}
+}
+
+func TestEmbedOnceOverUnixSocket(t *testing.T) {
+	u := serveUnix(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/embeddings" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":[{"embedding":[1,2]}]}`))
+	}))
+	got, err := EmbedOnce(context.Background(), nil, u, "tok", "embed", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, []float32{1, 2}) {
+		t.Fatalf("got %v", got)
+	}
+}
