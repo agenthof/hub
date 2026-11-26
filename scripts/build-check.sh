@@ -23,7 +23,7 @@ fi
 
 forbidden=("/Use""rs/" "/ho""me/" "$root")
 
-for agent in generic-chat router-chat; do
+for agent in generic-chat router-chat rag-ingest rag-retrieve rag-research; do
   for t in "${targets[@]}"; do
     goos=${t%/*}
     goarch=${t#*/}

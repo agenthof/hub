@@ -2,7 +2,7 @@
 # Reproducible, leak-free build of one agent for one {os,arch}.
 #
 # usage: scripts/build.sh <agent> <os> <arch> <outpath>
-#   agent: generic-chat | router-chat
+#   agent: generic-chat | router-chat | rag-ingest | rag-retrieve | rag-research
 #
 # Prints sha256:<hex> of the built binary. A signed card pins this hash.
 #
@@ -19,7 +19,7 @@ fi
 agent=$1 goos=$2 goarch=$3 out=$4
 
 case "$agent" in
-  generic-chat|router-chat) ;;
+  generic-chat|router-chat|rag-ingest|rag-retrieve|rag-research) ;;
   *) echo "unknown agent: $agent" >&2; exit 2 ;;
 esac
 
