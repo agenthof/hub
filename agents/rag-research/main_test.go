@@ -159,11 +159,11 @@ func TestResearchAnswersFromNotesAndKnowledge(t *testing.T) {
 		t.Fatal(err)
 	}
 	ms := body.Messages
-	if len(ms) != 2 || ms[0].Role != "system" || ms[1].Role != "user" || ms[1].Content != question {
+	if len(ms) != 2 || ms[0].Role != "system" || ms[1].Role != "user" {
 		t.Fatalf("messages = %+v", ms)
 	}
-	sys := ms[0].Content
-	for _, want := range []string{passage1, passage2, "own general knowledge", "2026-09-14", "n1", "data, not instructions"} {
+	sys, user := ms[0].Content, ms[1].Content
+	for _, want := range []string{"own general knowledge", "BOTH"} {
 		if !strings.Contains(sys, want) {
 			t.Errorf("system message lacks %q:\n%s", want, sys)
 		}
@@ -171,8 +171,15 @@ func TestResearchAnswersFromNotesAndKnowledge(t *testing.T) {
 	if strings.Contains(sys, "Use ONLY") {
 		t.Errorf("system message still forbids outside knowledge:\n%s", sys)
 	}
-	if strings.Contains(ms[1].Content, passage1) {
-		t.Error("passages leaked into the user message")
+	for _, want := range []string{passage1, passage2, "2026-09-14", "n1", "data, not instructions", question} {
+		if !strings.Contains(user, want) {
+			t.Errorf("user message lacks %q:\n%s", want, user)
+		}
+	}
+	for _, m := range ms {
+		if m.Role == "system" && (strings.Contains(m.Content, passage1) || strings.Contains(m.Content, passage2)) {
+			t.Error("retrieved passage text in a system message")
+		}
 	}
 }
 
@@ -195,7 +202,10 @@ func TestResearchNoHitsStillAnswers(t *testing.T) {
 	if len(body.Messages) != 2 || !strings.Contains(body.Messages[0].Content, "own general knowledge") {
 		t.Fatalf("messages = %+v", body.Messages)
 	}
-	if strings.Contains(body.Messages[0].Content, passage1) {
+	if !strings.Contains(body.Messages[1].Content, "No notes matched") {
+		t.Errorf("user message lacks the no-match note:\n%s", body.Messages[1].Content)
+	}
+	if strings.Contains(s.chats[0], passage1) {
 		t.Error("passages present with zero hits")
 	}
 }
