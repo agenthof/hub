@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Determinism + leak check for the agent build recipe.
-# For both agents, for the host {os,arch} and linux/amd64: build twice (the
+# For each agent, for the host {os,arch} and linux/amd64: build twice (the
 # second with a fresh GOCACHE), assert identical hashes, and assert the binary
 # contains no forbidden strings. These are the hashes pinned in public cards.
 #
