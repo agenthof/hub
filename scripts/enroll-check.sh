@@ -37,7 +37,6 @@ models:
   chat: {endpoint: http://localhost:4000, model: chat, api_key_env: K}
   router: {endpoint: http://localhost:4000, model: router, api_key_env: K}
   embed: {endpoint: http://localhost:4000, model: embed, api_key_env: K}
-defaults: {model: chat}
 tools:
   drive: {kind: mcp, url: "unix:///tmp/none-drive.sock", runtime: refbridge, credential_source: static_env, token_env: DK, read_only_tools: [search, readGoogleDoc]}
   memory: {kind: mcp, url: "unix:///tmp/none-mem.sock", runtime: refbridge, credential_source: static_env, token_env: MK, read_only_tools: [memory_search]}

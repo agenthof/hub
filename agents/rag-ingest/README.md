@@ -44,10 +44,10 @@ Replace `<tag>` with a release tag of this repository, and see
 
 ## Limits
 
-- The card requests no chat model and the agent makes no chat call. If your
-  gateway sets a default model, the chat door falls back to it, so the
-  enrolled agent's disclosure may list that default model as `not requested`.
-  The agent never calls it.
+- The card requests no chat model and the agent makes no chat call, so it
+  reaches no chat door. The model gateway is default-deny at the door: an
+  agent reaches a class of model only by naming a model of that class, and
+  this agent names only an embedding model.
 - The Drive search is expected to return one hit per line as
   `<documentId> <title>`, the shape the reference Drive tool returns. A Drive
   server that returns a different shape may not be parsed, and a hit that
